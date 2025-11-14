@@ -27,9 +27,10 @@ function formatAttendDt(attendDt) {
   return `${yyyy}.${mm}.${dd}`;
 }
 
-function getNowYyyyMmDdHmmPlus1Day() {
+function getNowYyyyMmDdHmmPlus9Hours30Minutes() {
   const now = new Date();
-  now.setDate(now.getDate() + 1); // 하루 뒤
+  now.setHours(now.getHours() + 9); // 9시간 추가
+  now.setMinutes(now.getMinutes() + 30); // 30분 추가
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
@@ -260,7 +261,7 @@ async function postNotice({ students, attendDt, config }) {
 
   const subject = `${formatAttendDt(attendDt)} 출석`;
   const contentHtml = buildNoticeContentByStatus(students);
-  const openDt = getNowYyyyMmDdHmmPlus1Day();
+  const openDt = getNowYyyyMmDdHmmPlus9Hours30Minutes();
 
   const responseText = await cyberClient.submitNoticeRequest({
     ud: config.userId,
