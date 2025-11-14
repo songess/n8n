@@ -26,11 +26,18 @@ const UPDATE_URL = BASE_URL + '/ilos/cls/pf/attend/attendance_update_form.acl';
 const UPDATE_LIST_URL = BASE_URL + '/ilos/cls/pf/attend/attendance_update_list.acl';
 const SUBMAIN_URL = BASE_URL + '/ilos/cls/pf/submain/submain_form.acl';
 const ASSIST_ROOM_URL = BASE_URL + '/ilos/cls/st/co/eclass_assist_room.acl';
+const NOTICE_URL = BASE_URL + '/ilos/cls/pf/notice/notice_list_form.acl';
+const NOTICE_INSERT_POP_URL = BASE_URL + '/ilos/cls/pf/notice/notice_insert_pop.acl';
+const NOTICE_INSERT_URL = BASE_URL + '/ilos/cls/pf/notice/notice_insert.acl';
 
 const USER_ID = process.env.CYBER_ID;
 const USER_PW = process.env.CYBER_PW;
 const COURSE_KEY = process.env.CYBER_KJ_KEY;
 const SEMESTER_START = process.env.CYBER_SEMESTER_START; // YYYYMMDD
+const NOTICE_REG_NAME = process.env.CYBER_NOTICE_REG_NAME; // 예: 송은수
+
+let latestLateAndAbsent = [];
+let latestAttendDt = null;
 
 function getTodayString() {
   const now = new Date();
@@ -46,6 +53,56 @@ function getTodayNoDotString() {
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
   return `${yyyy}${mm}${dd}`;
+}
+
+// yyyyMMdd → yyyy.mm.dd
+function formatAttendDt(attendDt) {
+  if (!attendDt || attendDt.length !== 8) {
+    return getTodayString(); // 기본값으로 오늘 날짜 반환
+  }
+  const yyyy = attendDt.slice(0, 4);
+  const mm = attendDt.slice(4, 6);
+  const dd = attendDt.slice(6, 8);
+  return `${yyyy}.${mm}.${dd}`;
+}
+
+function getNowYyyyMmDdHmm() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() + 30); // 현재 시간 + 30분
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const min = String(now.getMinutes()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}${hh}${min}`;
+}
+
+function buildNoticeContentByStatus(students) {
+  if (!students || students.length === 0) {
+    return '<p>지각/결석자가 없습니다.</p>';
+  }
+
+  const groups = students.reduce((acc, item) => {
+    const key = item.statusText || '기타';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(item.studentId);
+    return acc;
+  }, {});
+
+  const preferredOrder = ['결석', '지각'];
+  const orderedStatuses = [
+    ...preferredOrder.filter((status) => groups[status]),
+    ...Object.keys(groups).filter((status) => !preferredOrder.includes(status)),
+  ];
+
+  return orderedStatuses
+    .map((status) => {
+      const ids = groups[status]
+        .map((studentId) => `<div style="padding: 4px 8px; border-bottom: 1px solid #e8e8e8;">${studentId}</div>`)
+        .join('');
+      return `<div style="margin-bottom: 16px;"><h3 style="margin: 0 0 6px 0; padding: 6px 8px; background-color: #f5f5f5; border-left: 4px solid #4a90e2; font-size: 16px; font-weight: bold;">${status}</h3><div style="background-color: #fafafa; border-radius: 4px; overflow: hidden;">${ids}</div></div>`;
+    })
+    .join('');
 }
 
 // YYYYMMDD → Date
@@ -365,7 +422,114 @@ async function getLateAndAbsentStudents(attendNo) {
     );
   }
 
-  return result;
+  return {
+    students: result,
+    attendDt: attendDt,
+  };
+}
+
+/**
+ * 공지 페이지 진입
+ */
+async function enterNotice() {
+  console.log('📢 공지 페이지 진입:', NOTICE_URL);
+  
+  const res = await fetch(NOTICE_URL, {
+    method: 'GET',
+    headers: {
+      'Referer': SUBMAIN_URL,
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+    },
+  });
+  
+  console.log('📢 공지 페이지 응답 status:', res.status);
+  
+  return res;
+}
+
+/**
+ * 공지 글쓰기 팝업 진입
+ */
+async function openNoticeWriteForm() {
+  console.log('📝 공지 글쓰기 버튼 클릭(POST):', NOTICE_INSERT_POP_URL);
+
+  const body = new URLSearchParams({
+    encoding: 'utf-8',
+  }).toString();
+
+  const res = await fetch(NOTICE_INSERT_POP_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Referer': NOTICE_URL,
+      'X-Requested-With': 'XMLHttpRequest',
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+    },
+    body,
+  });
+
+  console.log('📝 공지 글쓰기 응답 status:', res.status);
+  return res;
+}
+
+/**
+ * 공지 글쓰기 제출
+ */
+async function submitNotice() {
+  if (!latestAttendDt) {
+    throw new Error('공지 작성 전에 attendDt 가 설정되지 않았습니다.');
+  }
+
+  const subject = `${formatAttendDt(latestAttendDt)} 출석`;
+  const contentHtml = buildNoticeContentByStatus(latestLateAndAbsent);
+  const noticeType = '1';
+  const closeDate = '99991231';
+
+  if (!USER_ID || !COURSE_KEY || !NOTICE_REG_NAME) {
+    throw new Error('공지 작성에 필요한 CYBER_ID/KJ_KEY/NOTICE_REG_NAME 환경변수가 설정되어 있지 않습니다.');
+  }
+
+  const openDt = getNowYyyyMmDdHmm();
+
+  const body = new URLSearchParams({
+    ud: USER_ID,
+    ky: COURSE_KEY,
+    returnData: 'json',
+    SBJT: subject,
+    REG_NM: NOTICE_REG_NAME,
+    OPEN_ST_DT: openDt,
+    cosubject: '',
+    TXT: contentHtml,
+    NOTICE_DV: noticeType,
+    NOTICE_ED_DT: closeDate,
+    ONLINE_SEQ: '',
+    FILE_SEQS: '',
+    EDITOR_SEQS: '',
+    encoding: 'utf-8',
+  }).toString();
+
+  console.log('📨 공지 등록 요청:', NOTICE_INSERT_URL, '제목:', subject);
+
+  const res = await fetch(NOTICE_INSERT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'Referer': NOTICE_URL,
+      'X-Requested-With': 'XMLHttpRequest',
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+    },
+    body,
+  });
+
+  console.log('📨 공지 등록 응답 status:', res.status);
+
+  const text = await res.text();
+  // console.log('📨 공지 등록 응답 body:', text);
+
+  return text;
 }
 
 /**
@@ -377,10 +541,18 @@ async function main() {
     await enterCourseRoom();
 
     const attendNo = await getTodayAttendNo();
-    const lateAndAbsent = await getLateAndAbsentStudents(attendNo);
+    const { students: lateAndAbsent, attendDt } = await getLateAndAbsentStudents(attendNo);
+
+    latestLateAndAbsent = lateAndAbsent;
+    latestAttendDt = attendDt;
 
     console.log('📊 지각/결석자 목록');
     console.log(JSON.stringify(lateAndAbsent, null, 2));
+    console.log('📅 출석 날짜 (attendDt):', attendDt);
+    
+    await enterNotice();
+    await openNoticeWriteForm();
+    await submitNotice();
   } catch (err) {
     console.error('❌ 오류 발생:', err.message);
     process.exit(1);
