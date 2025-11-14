@@ -260,7 +260,13 @@ async function postNotice({ students, attendDt, config }) {
   await cyberClient.openNoticeWriteForm();
 
   const subject = `${formatAttendDt(attendDt)} 출석`;
-  const contentHtml = buildNoticeContentByStatus(students);
+  const attendanceContent = buildNoticeContentByStatus(students);
+  
+  // content가 있으면 맨 위에 추가
+  const contentHtml = config.content 
+    ? `<div style="margin-bottom: 16px; padding: 12px; background-color: #f0f7ff; border-left: 4px solid #4a90e2; border-radius: 4px;"><p style="margin: 0; font-size: 15px;">${config.content}</p></div>${attendanceContent}`
+    : attendanceContent;
+  
   const openDt = getNowYyyyMmDdHmmPlus9Hours30Minutes();
 
   const responseText = await cyberClient.submitNoticeRequest({
@@ -285,17 +291,17 @@ async function postNotice({ students, attendDt, config }) {
 
 function validateConfig(config) {
   const required = [
-    { key: 'userId', env: 'CYBER_ID' },
-    { key: 'userPw', env: 'CYBER_PW' },
-    { key: 'courseKey', env: 'CYBER_KJ_KEY' },
-    { key: 'semesterStart', env: 'CYBER_SEMESTER_START' },
-    { key: 'noticeRegName', env: 'CYBER_NOTICE_REG_NAME' },
+    { key: 'userId', name: 'userId' },
+    { key: 'userPw', name: 'userPw' },
+    { key: 'courseKey', name: 'courseKey' },
+    { key: 'semesterStart', name: 'semesterStart' },
+    { key: 'noticeRegName', name: 'noticeRegName' },
   ];
 
   const missing = required.filter((item) => !config[item.key]);
   if (missing.length > 0) {
-    const envList = missing.map((m) => m.env).join(', ');
-    throw new Error(`.env에 ${envList} 값이 설정되어 있어야 합니다.`);
+    const keyList = missing.map((m) => m.name).join(', ');
+    throw new Error(`필수 설정값이 누락되었습니다: ${keyList}`);
   }
 }
 

@@ -1,4 +1,21 @@
-## 사용법
+## n8n 프로세스
+```
+[클라이언트 버튼 클릭]
+        ↓
+[n8n Webhook Trigger]
+        ↓ (POST)
+[n8n HTTP Request Node]
+        ↓ (POST /run-lms)
+[Railway Node.js Server]
+        ↓
+[사이버캠퍼스 로그인 → 출석 정보 수집]
+        ↓
+[공지 자동 작성]
+        ↓
+완료
+```
+
+## 로컬에서 사용법
 
 1. 환경 설정
 ```shell
