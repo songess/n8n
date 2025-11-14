@@ -59,7 +59,7 @@ github와 vercel을 연동해 배포 [깃허브 링크](https://github.com/songe
 
 첫번째로 upstage API 호출. 포춘쿠키에 대한 정보를 가져옴.
 
-두번째로 원본 데이터(이름, 학번, 비번)
+두번째로 원본 데이터(이름, 학번, 비번) 를 merge로 전달
 
 ### 3. Merge, JavaScript
 두 데이터를 Merge 노드에 넘기고 JavaScript노드를 통해 병합하여 LmsAutomation서버에 요청 전달
